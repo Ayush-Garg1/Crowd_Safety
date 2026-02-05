@@ -1,0 +1,4 @@
+train: C:/Users/hp/Downloads/crowd_project/data/merged/images/train
+val: C:/Users/hp/Downloads/crowd_project/data/merged/images/val
+nc: 1
+names: ['person']
