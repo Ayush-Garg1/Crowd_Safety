@@ -1,9 +1,11 @@
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
 import time
 
 LAST_ALERT_TIME = 0
-COOLDOWN = 60
+COOLDOWN = 60  # seconds
 
 def send_email_alert(count):
     global LAST_ALERT_TIME
@@ -15,7 +17,8 @@ def send_email_alert(count):
     LAST_ALERT_TIME = time.time()
 
     sender = "safetycrowd@gmail.com"
-    password = "ysjz lbkt wukp grfe"
+    password = "ysjz lbkt wukp grfe"  # App Password (keep secret ❗)
+
     receivers = [
         "mayankchandel830@gmail.com",
         "ayushgr2811@gmail.com",
@@ -23,13 +26,41 @@ def send_email_alert(count):
         "ayushnainwal135@gmail.com"
     ]
 
-
     print("📧 Trying to send email...")
 
-    msg = MIMEText(f"⚠ Crowd Alert!\nPeople Count: {count}\nRisk Level: HIGH")
-    msg["Subject"] = "Crowd Alert System"
+    # Timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    subject = "🚨 Crowd Risk Alert - Immediate Action Required"
+
+    body = f"""
+Dear Authority Team,
+
+This is an automated notification from the Smart Crowd Monitoring System.
+
+⚠ ALERT DETAILS
+----------------------------------------
+• People Count      : {count}
+• Risk Level        : HIGH
+• Time Detected     : {timestamp}
+• Monitoring Source : Camera 1
+
+The crowd density has exceeded the safe threshold. Immediate preventive action is recommended to avoid potential safety risks.
+
+Please treat this alert as high priority.
+
+Regards,
+Smart Crowd Monitoring System
+AI-Based Surveillance Unit
+
+(Note: This is an auto-generated email. Please do not reply.)
+"""
+
+    msg = MIMEMultipart()
+    msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = ", ".join(receivers)
+    msg.attach(MIMEText(body, "plain"))
 
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587)

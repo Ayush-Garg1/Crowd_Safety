@@ -33,17 +33,17 @@ while True:
 
     count = len(persons)
 
-    if count < 5:
-        risk = "LOW"
-    elif count < 10:
-        risk = "MEDIUM"
-    else:
-        risk = "HIGH"
-
-    # if count >= 1:
-    #     risk = "HIGH"
-    # else:
+    # if count < 5:
     #     risk = "LOW"
+    # elif count < 10:
+    #     risk = "MEDIUM"
+    # else:
+    #     risk = "HIGH"
+
+    if count >= 1:
+        risk = "HIGH"
+    else:
+        risk = "LOW"
 
     if risk == "HIGH":
         print("🔥 HIGH RISK DETECTED")
