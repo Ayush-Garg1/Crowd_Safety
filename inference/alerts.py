@@ -3,57 +3,62 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import time
+from config import get_settings
 
 LAST_ALERT_TIME = 0
-COOLDOWN = 60  # seconds
 
 def send_email_alert(count):
     global LAST_ALERT_TIME
 
-    if time.time() - LAST_ALERT_TIME < COOLDOWN:
+    s = get_settings()
+
+    if time.time() - LAST_ALERT_TIME < int(s.email_cooldown_seconds):
         print("⏳ Alert skipped (cooldown)")
-        return
+        return {"sent": False, "skipped": True, "reason": "cooldown"}
 
     LAST_ALERT_TIME = time.time()
 
-    sender = "safetycrowd@gmail.com"
-    password = "ysjz lbkt wukp grfe"  # App Password (keep secret ❗)
+    sender = s.email_sender
+    password = s.email_password
+    receivers = s.email_recipients
 
-    receivers = [
-        "mayankchandel830@gmail.com",
-        "ayushgr2811@gmail.com",
-        "n.hemunegi11@gmail.com",
-        "ayushnainwal135@gmail.com"
-    ]
+    if not sender or not password or not receivers:
+        return {
+            "sent": False,
+            "skipped": False,
+            "error": "Email is not configured. Set CM_EMAIL_SENDER, CM_EMAIL_PASSWORD, CM_EMAIL_RECIPIENTS.",
+        }
 
     print("📧 Trying to send email...")
 
     # Timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    subject = "🚨 Crowd Risk Alert - Immediate Action Required"
+    subject = "Crowd Monitor — High Crowd Risk Detected"
 
     body = f"""
-Dear Authority Team,
+Crowd Monitor — High Risk Alert
+================================
 
-This is an automated notification from the Smart Crowd Monitoring System.
+This is an automated notification from Crowd Monitor. The system detected a HIGH crowd-risk condition.
 
-⚠ ALERT DETAILS
-----------------------------------------
-• People Count      : {count}
-• Risk Level        : HIGH
-• Time Detected     : {timestamp}
-• Monitoring Source : Camera 1
+At a glance
+-----------
+Time detected      : {timestamp}
+Source             : Camera 1
+Risk level         : HIGH
+People detected    : {count}
 
-The crowd density has exceeded the safe threshold. Immediate preventive action is recommended to avoid potential safety risks.
+Recommended actions
+-------------------
+1) Verify the live feed and confirm congestion.
+2) Deploy crowd-control guidance (signage / staff) to reduce density.
+3) If sustained, initiate escalation per safety protocol.
 
-Please treat this alert as high priority.
+If this alert appears repeatedly, consider adjusting thresholds or camera placement for improved accuracy.
 
-Regards,
-Smart Crowd Monitoring System
-AI-Based Surveillance Unit
-
-(Note: This is an auto-generated email. Please do not reply.)
+— Crowd Monitor
+(Automated message. Replies are not monitored.)
 """
 
     msg = MIMEMultipart()
@@ -63,11 +68,19 @@ AI-Based Surveillance Unit
     msg.attach(MIMEText(body, "plain"))
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server = smtplib.SMTP(s.smtp_host, int(s.smtp_port))
         server.starttls()
         server.login(sender, password)
         server.sendmail(sender, receivers, msg.as_string())
         server.quit()
         print("✅ Email sent successfully!")
+        return {
+            "sent": True,
+            "skipped": False,
+            "recipients": receivers,
+            "count": count,
+            "timestamp": time.time(),
+        }
     except Exception as e:
         print("❌ Email error:", e)
+        return {"sent": False, "skipped": False, "error": str(e)}

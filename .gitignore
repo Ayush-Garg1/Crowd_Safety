@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+
+# Local env/secrets
+.env
+
+# Model weights / large artifacts
+*.pt
+
+# SQLite
+*.sqlite3
+*.db
+
+# Ultralytics runs
+runs/
+

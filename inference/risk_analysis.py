@@ -1,13 +1,16 @@
+from config import get_settings
+
 def analyze_risk(persons, width, height):
+    s = get_settings()
     count = len(persons)
 
     # Simple density calculation
     area = width * height
     density = count / area * 100000  # scaled density
 
-    if count >= 4:
+    if count >= s.risk_high:
         level = "HIGH"
-    elif count >= 2:
+    elif count >= s.risk_medium:
         level = "MEDIUM"
     elif count > 0:
         level = "LOW"

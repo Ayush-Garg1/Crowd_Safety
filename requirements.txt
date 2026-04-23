@@ -7,3 +7,4 @@ Pillow
 pyyaml
 pyserial
 reportlab
+python-dotenv
