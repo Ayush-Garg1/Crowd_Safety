@@ -294,4 +294,5 @@ This project is licensed under the terms in the [License](./License) file.
 
 <div align="center">
   <sub>Built with ❤️ by Ayush Nainwal, Himanshu Negi, Mayank Chandel & Ayush Garg</sub>
+  <sub>Give it a try</sub>
 </div>
