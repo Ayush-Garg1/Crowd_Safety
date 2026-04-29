@@ -1,3 +1,4 @@
+<!-- Updated README -->
 # 🧠 Crowd Monitoring and Alert System using YOLOv8
 
 > An AI-powered real-time surveillance solution that detects people in a video stream, analyzes crowd density, generates heatmaps, and automatically sends alerts when crowd levels exceed predefined thresholds.
