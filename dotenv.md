@@ -1,3 +1,4 @@
+```
 #############################################
 # Crowd Monitor - Example environment config #
 #############################################
@@ -24,3 +25,4 @@ CM_EMAIL_RECIPIENTS=
 # Persistence
 CM_DB_PATH=
 CM_SAMPLE_SECONDS=
+```
