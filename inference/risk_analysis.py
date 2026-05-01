@@ -17,11 +17,6 @@ def analyze_risk(persons, width, height):
     else:
         level = "NONE"
 
-    # if count >= 1:
-    #     level = "HIGH"
-    # else:
-    #     level = "LOW"
-
     return {
         "count": count,
         "level": level,

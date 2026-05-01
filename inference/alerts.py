@@ -19,8 +19,9 @@ def send_email_alert(count):
     LAST_ALERT_TIME = time.time()
 
     sender = s.email_sender
-    password = s.email_password
+    password = s.email_password.replace("_", " ")
     receivers = s.email_recipients
+    
 
     if not sender or not password or not receivers:
         return {

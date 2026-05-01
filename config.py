@@ -5,11 +5,13 @@ from pathlib import Path
 
 def _load_dotenv_if_available():
     try:
-        from dotenv import load_dotenv  # type: ignore
+        from dotenv import load_dotenv
     except Exception:
-        return
-    # Load .env from current working directory (project root) if present.
-    load_dotenv()
+        load_dotenv = None
+
+    if load_dotenv:
+        env_path = Path.cwd() / ".env"
+        load_dotenv(env_path, override=True)
 
 
 def _get_int(name: str, default: int) -> int:
