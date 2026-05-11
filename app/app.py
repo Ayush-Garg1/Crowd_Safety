@@ -7,7 +7,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from flask import Flask, render_template, Response, jsonify, send_file
+from flask import Flask, render_template, Response, jsonify, send_file, request
 import cv2
 from ultralytics import YOLO
 from inference.heatmap import make_heatmap
@@ -49,10 +49,6 @@ cap = None
 cap_lock = threading.Lock()
 
 def get_capture():
-    """Get (or recreate) the webcam capture safely.
-
-    Flask debug reloader can start the app twice; lazy init avoids double-open issues.
-    """
     global cap
     with cap_lock:
         if cap is not None and cap.isOpened():
@@ -75,6 +71,11 @@ current_data = {
     'last_email_alert': None
 }
 data_lock = threading.Lock()
+
+# ── Room area (set via UI before monitoring starts) ──
+room_area_m2 = None
+room_area_lock = threading.Lock()
+# ─────────────────────────────────────────────────────
 
 # SQLite persistence
 db_lock = threading.Lock()
@@ -143,25 +144,20 @@ def insert_email_alert(result: dict, risk_level: str):
         )
         db.commit()
 
-# Local (server-side) audible alarm: triggers automatically on HIGH.
 last_alarm_time = 0.0
 ALARM_COOLDOWN_SECONDS = 3.0
 
 def _play_local_alarm_pattern():
-    """Non-blocking-ish alarm pattern for Windows."""
     if winsound is None:
         return
-    # Short siren-like 2-tone pattern (~0.6s)
     try:
         winsound.Beep(880, 220)
         winsound.Beep(660, 220)
         winsound.Beep(880, 220)
     except Exception:
-        # If Beep fails (permissions/driver), ignore.
         pass
 
 def trigger_local_alarm():
-    """Rate-limited local alarm trigger."""
     global last_alarm_time
     now = time.time()
     if now - last_alarm_time < ALARM_COOLDOWN_SECONDS:
@@ -170,17 +166,14 @@ def trigger_local_alarm():
     threading.Thread(target=_play_local_alarm_pattern, daemon=True).start()
 
 def _history_sampler():
-    """Background sampler for report generation."""
     while True:
         with data_lock:
             snap = dict(current_data)
-
         snap["timestamp"] = float(snap.get("timestamp", time.time()))
         try:
             insert_sample(snap)
         except Exception:
             pass
-
         time.sleep(int(settings.sample_seconds))
 
 def _build_report_pdf(title: str, period_label: str, rows: list[dict]) -> io.BytesIO:
@@ -230,7 +223,6 @@ def _build_report_pdf(title: str, period_label: str, rows: list[dict]) -> io.Byt
         low_events = sum(1 for r in rows if str(r.get("risk_level", "")).upper() == "LOW")
         none_events = sum(1 for r in rows if str(r.get("risk_level", "")).upper() == "NONE")
 
-        # At-a-glance KPIs
         kpi_data = [
             ["AVG PEOPLE", "PEAK", "HIGH EVENTS", "SAMPLES"],
             [f"{avg_count:.1f}", f"{max_count}", f"{high_events}", f"{len(rows)}"],
@@ -275,7 +267,6 @@ def _build_report_pdf(title: str, period_label: str, rows: list[dict]) -> io.Byt
         story.append(Paragraph("No data captured yet. Keep the dashboard running to collect samples.", styles["BodyText"]))
         story.append(Spacer(1, 12))
 
-    # Notable moments (top peaks)
     if rows:
         peaks = sorted(
             rows,
@@ -314,7 +305,7 @@ def _build_report_pdf(title: str, period_label: str, rows: list[dict]) -> io.Byt
     story.append(Paragraph("<b>Detailed samples (most recent)</b>", styles["BodyText"]))
     story.append(Spacer(1, 6))
     table_data = [["Time", "People", "Risk", "Avg density", "Max density"]]
-    for r in rows[-60:]:  # keep it readable: last 60 samples
+    for r in rows[-60:]:
         ts = datetime.fromtimestamp(float(r.get("timestamp", time.time()))).strftime("%Y-%m-%d %H:%M:%S")
         table_data.append(
             [
@@ -361,24 +352,31 @@ def _build_report_pdf(title: str, period_label: str, rows: list[dict]) -> io.Byt
 def gen_frames():
     global current_data
     while True:
+        # ── Wait until room area is configured ──
+        with room_area_lock:
+            area = room_area_m2
+        if area is None:
+            time.sleep(0.2)
+            continue
+        # ─────────────────────────────────────────
+
         local_cap = get_capture()
         success, frame = local_cap.read()
         if not success:
-            # camera might be temporarily unavailable; wait and retry
             time.sleep(0.2)
             break
+
         results = model(frame, imgsz=640)
         persons = []
         for r in results:
             for box in r.boxes:
                 if int(box.cls[0]) == 0:
-                    x1,y1,x2,y2 = map(int, box.xyxy[0])
-                    persons.append((x1,y1,x2,y2))
-                    cv2.rectangle(frame, (x1,y1),(x2,y2),(0,255,0),2)
-        
-        # Enhanced risk analysis
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    persons.append((x1, y1, x2, y2))
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
         h, w = frame.shape[:2]
-        risk_data = analyze_risk(persons, w, h)
+        risk_data = analyze_risk(persons, w, h, area)   # ← pass area
         risk_level = risk_data['level']
         count = risk_data['count']
 
@@ -392,40 +390,36 @@ def gen_frames():
                     insert_email_alert(email_result, risk_level)
                 except Exception:
                     pass
-        
-        # Update global data for API
+
         with data_lock:
             current_data = {
                 'count': count,
                 'risk_level': risk_level,
-                'avg_density': risk_data['avg_density'],
-                'max_density': risk_data['max_density'],
+                'avg_density': risk_data['density'],
+                'max_density': risk_data['density'],
                 'timestamp': time.time(),
                 'last_email_alert': (email_result if (risk_level == "HIGH" and isinstance(email_result, dict) and email_result.get("sent")) else current_data.get("last_email_alert"))
             }
-        
-        # Color coding based on risk level
+
         if risk_level == 'HIGH':
-            risk_color = (0, 0, 255)  # Red
+            risk_color = (0, 0, 255)
         elif risk_level == 'MEDIUM':
-            risk_color = (0, 165, 255)  # Orange
+            risk_color = (0, 165, 255)
         elif risk_level == 'NONE':
-            risk_color = (128, 128, 128)  # Gray
+            risk_color = (128, 128, 128)
         else:
-            risk_color = (0, 255, 0)  # Green
-        
-        heatmap_img = make_heatmap(frame, persons, grid=(3,3))
+            risk_color = (0, 255, 0)
+
+        heatmap_img = make_heatmap(frame, persons, grid=(3, 3))
         overlay = cv2.addWeighted(frame, 0.7, heatmap_img, 0.3, 0)
-        
-        # Display risk information
-        text = f"Count: {count} | Risk: {risk_level}"
-        if risk_data['max_density'] > 0:
-            text += f" | Density: {risk_data['max_density']:.1f}"
+
+        text = f"Count: {count} | Risk: {risk_level} | Density: {risk_data['density']:.2f}/m2"
         cv2.putText(overlay, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, risk_color, 2)
 
         ret, buffer = cv2.imencode('.jpg', overlay)
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
 
 @app.route('/')
 def index():
@@ -437,9 +431,39 @@ def video():
 
 @app.route('/api/data')
 def get_data():
-    """API endpoint to get current crowd data"""
     with data_lock:
         return jsonify(current_data)
+
+# ── NEW: receive room area from the UI ──
+@app.route('/api/set_room', methods=['POST'])
+def set_room():
+    global room_area_m2
+    data = request.get_json()
+    try:
+        mode = data.get('mode')
+        if mode == 'dimensions':
+            length = float(data['length'])
+            width  = float(data['width'])
+            area   = length * width
+        else:
+            area = float(data['area'])
+
+        if area <= 0:
+            return jsonify({'ok': False, 'error': 'Area must be greater than 0'}), 400
+
+        with room_area_lock:
+            room_area_m2 = area
+
+        return jsonify({'ok': True, 'room_area_m2': area})
+    except (KeyError, ValueError, TypeError) as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+@app.route('/api/room_status')
+def room_status():
+    with room_area_lock:
+        area = room_area_m2
+    return jsonify({'configured': area is not None, 'room_area_m2': area})
+# ────────────────────────────────────────
 
 @app.route('/report/daily')
 def report_daily():
@@ -483,5 +507,4 @@ if __name__ == '__main__':
     settings = get_settings()
     init_db()
     threading.Thread(target=_history_sampler, daemon=True).start()
-    # Disable the reloader to prevent double-opening the camera on restart.
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

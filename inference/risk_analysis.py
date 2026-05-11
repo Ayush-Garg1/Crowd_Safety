@@ -1,25 +1,34 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from config import get_settings
 
-def analyze_risk(persons, width, height):
+def analyze_risk(persons, width, height, room_area_m2):
     s = get_settings()
     count = len(persons)
 
-    # Simple density calculation
-    area = width * height
-    density = count / area * 100000  # scaled density
+    if room_area_m2 <= 0 or count == 0:
+        return {
+            "count": count,
+            "level": "NONE",
+            "density": 0.0,
+            "room_area_m2": room_area_m2,
+        }
 
-    if count >= s.risk_high:
+    # Density = people per square metre
+    density = count / room_area_m2
+
+    if density >= float(s.density_high):
         level = "HIGH"
-    elif count >= s.risk_medium:
+    elif density >= float(s.density_medium):
         level = "MEDIUM"
-    elif count > 0:
-        level = "LOW"
     else:
-        level = "NONE"
+        level = "LOW"
 
     return {
         "count": count,
         "level": level,
-        "avg_density": density,
-        "max_density": density
+        "density": round(density, 3),
+        "room_area_m2": room_area_m2,
     }

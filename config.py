@@ -55,6 +55,11 @@ class Settings:
     risk_medium: int
     risk_high: int
 
+    # Risk thresholds (density-based, people per m²)
+    room_area_m2: float
+    density_medium: float
+    density_high: float
+
     # Email / SMTP
     email_cooldown_seconds: int
     smtp_host: str
@@ -82,6 +87,9 @@ def get_settings() -> Settings:
         camera_index=_get_int("CM_CAMERA_INDEX", 0),
         risk_medium=_get_int("CM_RISK_MEDIUM", 2),
         risk_high=_get_int("CM_RISK_HIGH", 4),
+        room_area_m2=_get_float("CM_ROOM_AREA_M2", 50.0),
+        density_medium=_get_float("CM_DENSITY_MEDIUM", 0.5),
+        density_high=_get_float("CM_DENSITY_HIGH", 2.0),
         email_cooldown_seconds=_get_int("CM_EMAIL_COOLDOWN_SECONDS", 60),
         smtp_host=_get_str("CM_SMTP_HOST", "smtp.gmail.com"),
         smtp_port=_get_int("CM_SMTP_PORT", 587),
